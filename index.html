@@ -1284,7 +1284,7 @@ window.addEventListener('keydown', e => {
 
 const ORT_BASE = (window.__ORT_BASE) || 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 // Model, sitenin kendi deposundan (GitHub Pages) otomatik okunur. index.html ile aynı klasöre "model.onnx" koyun.
-// Başka bir yol/ad isterseniz: <script>window.__MODEL_URL='models/soru.onnx'</script> (bu betikten ÖNCE)
+// Başka bir yol/ad isterseniz: window.__MODEL_URL = 'models/soru.onnx' tanımını bu betikten önce yapın.
 const MODEL_URL = window.__MODEL_URL || 'model.onnx';
 const YOLO = { sess: null, name: null, w: 1024, h: 1024, conf: 0.35, iou: 0.5, loading: null, busy: false, src: null, repoFailed: false };
 S.detMode = store.get('detMode', 'yolo') === 'rule' ? 'rule' : 'yolo';
