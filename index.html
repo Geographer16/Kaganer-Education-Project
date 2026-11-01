@@ -1074,7 +1074,7 @@ function resetPage(doc, i) {
 async function detGuard() {
   if (S.detMode !== 'yolo') return true;
   if (await yoloReady()) return true;
-  toast('YOLO modeli yüklenemedi. Siteyle aynı klasörde “' + MODEL_URL + '” dosyası olmalı; olmazsa “⬆ Model (.onnx)” ile elle yükleyebilirsiniz.', null, null, 7000);
+  toast('YOLO modeli bulunamadı. Denenen: ' + ((YOLO.tried || []).join(' | ') || MODEL_URLS.join(', ')) + '. Dosyayı index.html ile aynı klasöre koyun ya da “⬆ Model (.onnx)” ile elle yükleyin.', null, null, 12000);
   return false;
 }
 function detRun(on) {
@@ -1285,7 +1285,7 @@ window.addEventListener('keydown', e => {
 const ORT_BASE = (window.__ORT_BASE) || 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 // Model, sitenin kendi deposundan (GitHub Pages) otomatik okunur. index.html ile aynı klasöre "model.onnx" koyun.
 // Başka bir yol/ad isterseniz: window.__MODEL_URL = 'models/soru.onnx' tanımını bu betikten önce yapın.
-const MODEL_URL = window.__MODEL_URL || 'model.onnx';
+const MODEL_URLS = window.__MODEL_URL ? [window.__MODEL_URL] : ['model.onnx', 'best.onnx', 'models/model.onnx', 'models/best.onnx', 'yolo.onnx', 'soru.onnx'];
 const YOLO = { sess: null, name: null, w: 1024, h: 1024, conf: 0.35, iou: 0.5, loading: null, busy: false, src: null, repoFailed: false };
 S.detMode = store.get('detMode', 'yolo') === 'rule' ? 'rule' : 'yolo';
 const idb = {
@@ -1358,16 +1358,20 @@ function yoloReady() {
     try {
       // 1) Depodaki hazır model (kullanıcının bir şey seçmesine gerek yok)
       if (!YOLO.repoFailed) {
-        try {
-          setStatus('YOLO modeli indiriliyor…');
-          const r = await fetch(MODEL_URL);
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          const bytes = new Uint8Array(await r.arrayBuffer());
-          if (bytes.length < 4096) throw new Error('model dosyası geçersiz (Git LFS işaretçisi olabilir)');
-          await yoloSetModel(bytes, MODEL_URL.split('?')[0].split('/').pop(), 'repo');
-          setStatus('Hazır.');
-          return true;
-        } catch (e) { YOLO.repoFailed = true; setStatus('Hazır.'); console.warn('Depodaki model yüklenemedi (' + MODEL_URL + '):', e); }
+        YOLO.tried = [];
+        setStatus('YOLO modeli indiriliyor…');
+        for (const url of MODEL_URLS) {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) { YOLO.tried.push(url + ' → HTTP ' + r.status); continue; }
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            if (bytes.length < 4096) { YOLO.tried.push(url + ' → geçersiz dosya (' + bytes.length + ' bayt; Git LFS işaretçisi olabilir)'); continue; }
+            await yoloSetModel(bytes, url.split('?')[0].split('/').pop(), 'repo');
+            setStatus('Hazır.');
+            return true;
+          } catch (e) { YOLO.tried.push(url + ' → ' + (e && e.message || e)); }
+        }
+        YOLO.repoFailed = true; setStatus('Hazır.'); console.warn('Depodaki model bulunamadı:', YOLO.tried);
       }
       // 2) Yedek: daha önce elle yüklenmiş model
       const m = await idb.get('model'); if (!m) return false;
@@ -1384,7 +1388,7 @@ function updateYoloUI() {
   const prov = YOLO.prov ? ' · ' + ({ webgpu: 'GPU', wasm: 'CPU', 'wasm-main': 'CPU (yavaş mod)' }[YOLO.prov] || YOLO.prov) : '';
   $('#yoloInfo').textContent = YOLO.name
     ? (YOLO.src === 'repo' ? 'YOLO modeli hazır' : 'model: ' + YOLO.name) + prov
-    : (YOLO.busy ? 'model yükleniyor…' : (YOLO.repoFailed ? 'model bulunamadı — elle yükleyin' : 'model yok'));
+    : (YOLO.busy ? 'model yükleniyor…' : (YOLO.repoFailed ? 'model bulunamadı (' + (YOLO.tried && YOLO.tried[0] ? YOLO.tried[0] : 'model.onnx') + ') — elle yükleyin' : 'model yok'));
 }
 $('#detMode').onchange = e => { S.detMode = e.target.value; store.set('detMode', S.detMode); updateYoloUI(); if (S.detMode === 'yolo') yoloReady().then(ok => { if (ok) updateYoloUI(); }); };
 $('#yoloLoad').onclick = () => $('#yoloFile').click();
